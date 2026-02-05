@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 在线对战</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 游戏大厅 -->
+        <div id="lobby" class="screen">
+            <div class="container">
+                <h1>🏮 中国象棋 🏮</h1>
+                
+                <div class="menu-section">
+                    <h2>选择游戏模式</h2>
+                    <div class="menu-buttons">
+                        <button class="btn btn-primary" onclick="showAIMenu()">
+                            <span class="icon">🤖</span>
+                            <span>人机对战</span>
+                        </button>
+                        <button class="btn btn-success" onclick="showOnlineLobby()">
+                            <span class="icon">👥</span>
+                            <span>在线对战</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- AI难度选择 -->
+                <div id="ai-menu" class="ai-menu hidden">
+                    <h2>选择AI引擎</h2>
+                    
+                    <!-- AI引擎选择 -->
+                    <div class="engine-selector">
+                        <h3>选择AI引擎</h3>
+                        <div class="engine-options">
+                            <label class="engine-option">
+                                <input type="radio" name="ai-engine" value="cloud" checked>
+                                <span class="engine-info">
+                                    <span class="engine-name">☁️ 云库API</span>
+                                    <span class="engine-desc">基于云库大数据，棋力强大</span>
+                                </span>
+                            </label>
+                            <label class="engine-option">
+                                <input type="radio" name="ai-engine" value="pikafish">
+                                <span class="engine-info">
+                                    <span class="engine-name">🐟 Pikafish引擎</span>
+                                    <span class="engine-desc">当前最强开源象棋引擎</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 游戏模式选择 -->
+                    <div class="game-mode-selector">
+                        <h3>选择游戏模式</h3>
+                        <div class="mode-options">
+                            <button class="btn btn-mode" onclick="startHumanVsAIGame()">
+                                <span class="mode-icon">👤</span>
+                                <span class="mode-name">人机对战</span>
+                                <span class="mode-desc">玩家 vs AI</span>
+                            </button>
+                            <button class="btn btn-mode" onclick="startAIGame('ai-vs-ai')">
+                                <span class="mode-icon">🤖</span>
+                                <span class="mode-name">AI对弈</span>
+                                <span class="mode-desc">AI vs AI</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- AI对AI设置 -->
+                    <div id="ai-vs-ai-settings" class="ai-vs-ai-settings hidden">
+                        <h3>AI对弈设置</h3>
+                        <div class="ai-players">
+                            <div class="ai-player-select">
+                                <label>红方AI:</label>
+                                <select id="red-ai-engine">
+                                    <option value="cloud">☁️ 云库API</option>
+                                    <option value="pikafish">🐟 Pikafish引擎</option>
+                                </select>
+                            </div>
+                            <div class="ai-player-select">
+                                <label>黑方AI:</label>
+                                <select id="black-ai-engine">
+                                    <option value="cloud">☁️ 云库API</option>
+                                    <option value="pikafish" selected>🐟 Pikafish引擎</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="ai-speed-control">
+                            <label>对弈速度:</label>
+                            <select id="ai-speed">
+                                <option value="2000">慢速 (2秒/步)</option>
+                                <option value="1000" selected>正常 (1秒/步)</option>
+                                <option value="500">快速 (0.5秒/步)</option>
+                                <option value="100">极速 (0.1秒/步)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-start-ai-vs-ai" onclick="startAIVsAI()">开始AI对弈</button>
+                    </div>
+
+                    <button class="btn btn-back" onclick="hideAIMenu()">返回</button>
+                </div>
+
+                <!-- 在线玩家列表 -->
+                <div id="online-lobby" class="online-obby hidden">
+                    <div class="lobby-header">
+                        <h2>在线玩家</h2>
+                        <button class="btn btn-back" onclick="hideOnlineLobby()">返回</button>
+                    </div>
+                    <div class="player-list" id="player-list">
+                        <div class="loading">正在加载在线玩家...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏界面 -->
+        <div id="game-screen" class="screen hidden">
+            <div class="game-container">
+                <div class="game-header">
+                    <div class="player-info red">
+                        <div class="player-avatar" id="red-avatar">🔴</div>
+                        <div class="player-details">
+                            <div class="player-name" id="red-name">红方</div>
+                            <div class="player-status" id="red-status">思考中...</div>
+                        </div>
+                    </div>
+                    <div class="game-info">
+                        <div class="turn-indicator" id="turn-indicator">红方回合</div>
+                        <div class="ai-thinking-timer" id="ai-thinking-timer">
+                            <span class="timer-icon">⏱️</span>
+                            <span class="timer-text" id="timer-text">--</span>
+                        </div>
+                        <button class="btn btn-small" onclick="surrender()">认输</button>
+                    </div>
+                    <div class="player-info black">
+                        <div class="player-avatar" id="black-avatar">⚫</div>
+                        <div class="player-details">
+                            <div class="player-name" id="black-name">黑方</div>
+                            <div class="player-status" id="black-status">等待中</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="board-container">
+                    <canvas id="chess-board" width="560" height="620"></canvas>
+                </div>
+
+                <div class="game-controls">
+                    <button class="btn btn-secondary" onclick="undoMove()">悔棋</button>
+                    <button class="btn btn-secondary" onclick="restartGame()">重新开始</button>
+                    <button class="btn btn-back" onclick="backToLobby()">返回大厅</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 挑战弹窗 -->
+        <div id="challenge-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>游戏邀请</h3>
+                <p id="challenge-message"></p>
+                <div class="modal-buttons">
+                    <button class="btn btn-success" onclick="acceptChallenge()">接受</button>
+                    <button class="btn btn-danger" onclick="declineChallenge()">拒绝</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏结束弹窗 -->
+        <div id="game-over-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3 id="game-over-title">游戏结束</h3>
+                <p id="game-over-message"></p>
+                <div class="modal-buttons">
+                    <button class="btn btn-primary" onclick="restartGame()">再来一局</button>
+                    <button class="btn btn-back" onclick="backToLobby()">返回大厅</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/gameLogic.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/network.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

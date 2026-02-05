@@ -1,0 +1,26 @@
+{
+  "name": "chess-game",
+  "version": "1.0.0",
+  "description": "网页版象棋软件 - 支持AI对战和在线对战",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "chess",
+    "象棋",
+    "game",
+    "websocket"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "ws": "^8.13.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
