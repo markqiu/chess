@@ -13,7 +13,8 @@ class BaseAI {
 class CloudAI extends BaseAI {
     constructor(game) {
         super(game);
-        this.apiURL = 'http://www.chessdb.cn/chessdb.php';
+        // 使用 HTTPS 协议以避免混合内容问题
+        this.apiURL = 'https://www.chessdb.cn/chessdb.php';
     }
 
     // 将棋盘转换为FEN格式
