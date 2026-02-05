@@ -81,8 +81,27 @@ class CloudAI extends BaseAI {
             let url = `${this.apiURL}?action=querybest&board=${encodeURIComponent(fen)}`;
             console.log('[CloudAI] 请求URL (querybest):', url);
 
-            let response = await fetch(url);
-            let result = await response.text();
+            let response;
+            try {
+                response = await fetch(url, {
+                    mode: 'cors',
+                    headers: {
+                        'Accept': 'text/plain',
+                    }
+                });
+            } catch (networkError) {
+                console.error('[CloudAI] 网络请求失败:', networkError);
+                console.log('[CloudAI] 可能是 CORS 或网络问题，使用本地评估');
+                return this.getBestMoveLocal();
+            }
+            
+            let result;
+            try {
+                result = await response.text();
+            } catch (textError) {
+                console.error('[CloudAI] 读取响应失败:', textError);
+                return this.getBestMoveLocal();
+            }
             
             console.log('[CloudAI] 云库返回结果 (querybest):', result);
 
@@ -118,9 +137,19 @@ class CloudAI extends BaseAI {
                 url = `${this.apiURL}?action=queryall&board=${encodeURIComponent(fen)}`;
                 console.log('[CloudAI] 请求URL (queryall):', url);
                 
-                response = await fetch(url);
-                result = await response.text();
-                console.log('[CloudAI] 云库返回结果 (queryall):', result);
+                try {
+                    response = await fetch(url, {
+                        mode: 'cors',
+                        headers: {
+                            'Accept': 'text/plain',
+                        }
+                    });
+                    result = await response.text();
+                    console.log('[CloudAI] 云库返回结果 (queryall):', result);
+                } catch (networkError) {
+                    console.error('[CloudAI] queryall 网络请求失败:', networkError);
+                    return this.getBestMoveLocal();
+                }
                 
                 // queryall 返回格式: move:c3c4,score:100,rank:1,winrate:50,note:|move:c3c5,score:90,rank:2,winrate:48,note:
                 if (result && result !== 'unknown' && result !== 'invalid board') {
@@ -246,56 +275,60 @@ class CloudAI extends BaseAI {
     }
 
     // 本地评估获取最佳走法（当云库完全不可用时使用）
+    // 增强版：使用 minimax 算法和 alpha-beta 剪枝
     getBestMoveLocal() {
-        console.log('[CloudAI] 使用本地评估选择走法');
+        console.log('[CloudAI] 使用增强本地评估选择走法');
+        const color = this.game.currentPlayer;
+        
+        // 使用 minimax 搜索
+        const result = this.minimax(3, color, color, -Infinity, Infinity);
+        
+        if (result.move) {
+            console.log(`[CloudAI] 本地评估选择走法: ${JSON.stringify(result.move)}, 分数: ${result.score.toFixed(2)}`);
+            return result.move;
+        }
+        
+        // 如果 minimax 失败，使用简单的启发式
+        return this.getSimpleHeuristicMove();
+    }
+    
+    // 简单的启发式走法（作为后备）
+    getSimpleHeuristicMove() {
         const color = this.game.currentPlayer;
         const moves = this.getAllMoves(color);
         
-        if (moves.length === 0) {
-            console.log('[CloudAI] 无可用走法');
-            return null;
-        }
+        if (moves.length === 0) return null;
         
-        // 简单的评估函数
         let bestMove = null;
         let bestScore = -Infinity;
         
         for (const move of moves) {
             let score = 0;
             
-            // 优先考虑吃子
+            // 吃子价值
             if (move.captured) {
                 const pieceValues = {
-                    'k': 10000,  // 将/帅
-                    'r': 900,    // 车
-                    'n': 400,    // 马
-                    'b': 200,    // 象/相
-                    'a': 200,    // 士
-                    'c': 450,    // 炮
-                    'p': 100     // 兵/卒
+                    'king': 10000,
+                    'rook': 900,
+                    'cannon': 450,
+                    'horse': 400,
+                    'elephant': 200,
+                    'advisor': 200,
+                    'pawn': 100
                 };
                 score += pieceValues[move.captured.type] || 0;
             }
             
-            // 优先考虑将军
-            // 模拟走法后检查是否将军
-            const originalPiece = this.game.board[move.to.row][move.to.col];
-            const movingPiece = this.game.board[move.from.row][move.from.col];
+            // 位置评估
+            score += this.evaluatePosition(move.to, move.piece);
             
-            this.game.board[move.to.row][move.to.col] = movingPiece;
-            this.game.board[move.from.row][move.from.col] = null;
-            
-            const opponentColor = color === 'red' ? 'black' : 'red';
-            if (this.game.isChecked(opponentColor)) {
-                score += 50;
+            // 将军奖励
+            if (this.simulateMove(move, () => {
+                const opponentColor = color === 'red' ? 'black' : 'red';
+                return this.game.isChecked(opponentColor);
+            })) {
+                score += 200;
             }
-            
-            // 恢复棋盘
-            this.game.board[move.from.row][move.from.col] = movingPiece;
-            this.game.board[move.to.row][move.to.col] = originalPiece;
-            
-            // 添加一些随机性，避免走法过于固定
-            score += Math.random() * 10;
             
             if (score > bestScore) {
                 bestScore = score;
@@ -303,8 +336,140 @@ class CloudAI extends BaseAI {
             }
         }
         
-        console.log(`[CloudAI] 本地评估选择走法: ${JSON.stringify(bestMove)}, 分数: ${bestScore.toFixed(2)}`);
         return bestMove;
+    }
+    
+    // Minimax 算法实现
+    minimax(depth, currentColor, maximizingColor, alpha, beta) {
+        if (depth === 0) {
+            return { score: this.evaluateBoard(maximizingColor), move: null };
+        }
+        
+        const moves = this.getAllMoves(currentColor);
+        if (moves.length === 0) {
+            return { score: currentColor === maximizingColor ? -10000 : 10000, move: null };
+        }
+        
+        let bestMove = null;
+        const isMaximizing = currentColor === maximizingColor;
+        let bestScore = isMaximizing ? -Infinity : Infinity;
+        
+        // 排序走法：优先尝试吃子和将军
+        moves.sort((a, b) => {
+            let scoreA = 0, scoreB = 0;
+            if (a.captured) scoreA += 1000;
+            if (b.captured) scoreB += 1000;
+            return scoreB - scoreA;
+        });
+        
+        for (const move of moves) {
+            const score = this.simulateMove(move, () => {
+                const opponentColor = currentColor === 'red' ? 'black' : 'red';
+                const result = this.minimax(depth - 1, opponentColor, maximizingColor, alpha, beta);
+                return result.score;
+            });
+            
+            if (isMaximizing) {
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+                alpha = Math.max(alpha, score);
+            } else {
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+                beta = Math.min(beta, score);
+            }
+            
+            if (beta <= alpha) break; // Alpha-beta 剪枝
+        }
+        
+        return { score: bestScore, move: bestMove };
+    }
+    
+    // 模拟走法并执行回调
+    simulateMove(move, callback) {
+        const board = this.game.board;
+        const fromPiece = board[move.from.row][move.from.col];
+        const toPiece = board[move.to.row][move.to.col];
+        
+        // 执行走法
+        board[move.to.row][move.to.col] = fromPiece;
+        board[move.from.row][move.from.col] = null;
+        
+        // 执行回调
+        const result = callback();
+        
+        // 恢复棋盘
+        board[move.from.row][move.from.col] = fromPiece;
+        board[move.to.row][move.to.col] = toPiece;
+        
+        return result;
+    }
+    
+    // 评估整个棋盘
+    evaluateBoard(color) {
+        const pieceValues = {
+            'king': 10000,
+            'rook': 900,
+            'cannon': 450,
+            'horse': 400,
+            'elephant': 200,
+            'advisor': 200,
+            'pawn': 100
+        };
+        
+        let score = 0;
+        for (let r = 0; r < 10; r++) {
+            for (let c = 0; c < 9; c++) {
+                const piece = this.game.board[r][c];
+                if (piece) {
+                    let value = pieceValues[piece.type] || 0;
+                    value += this.evaluatePosition({row: r, col: c}, piece);
+                    
+                    if (piece.color === color) {
+                        score += value;
+                    } else {
+                        score -= value;
+                    }
+                }
+            }
+        }
+        
+        return score;
+    }
+    
+    // 评估棋子位置
+    evaluatePosition(pos, piece) {
+        let score = 0;
+        const {row, col} = pos;
+        
+        // 兵/卒的位置奖励（过河后更强）
+        if (piece.type === 'pawn') {
+            if (piece.color === 'red' && row <= 4) score += 50; // 红兵过河
+            if (piece.color === 'black' && row >= 5) score += 50; // 黑卒过河
+            // 靠近对方九宫格
+            if (col >= 3 && col <= 5) score += 20;
+        }
+        
+        // 马的位置奖励（避免边缘）
+        if (piece.type === 'horse') {
+            if (col > 0 && col < 8 && row > 0 && row < 9) score += 10;
+        }
+        
+        // 车的位置奖励（控制中路）
+        if (piece.type === 'rook') {
+            if (col === 4) score += 15; // 中路
+        }
+        
+        // 炮的位置奖励
+        if (piece.type === 'cannon') {
+            score += 5; // 炮在开局有一定价值
+        }
+        
+        return score;
     }
 }
 
