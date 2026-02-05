@@ -25,7 +25,7 @@ pikafish.init().then(success => {
 });
 
 // 静态文件服务
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '..')));
 
 // 存储玩家信息
 const players = new Map();
